@@ -1,0 +1,4 @@
+# Vercel publishes only the page. The engine (Python, models, keys) never leaves the robot.
+/*
+!/web
+!/vercel.json

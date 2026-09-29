@@ -128,6 +128,20 @@ ol.log .t{text-align:right; color:var(--ink-faint); font-feature-settings:"onum"
 ol.log .p3{color:var(--red)}
 ol.log .p1,ol.log .p0{color:var(--ink-soft)}
 
+.connect{max-width:1360px; margin:0 auto; padding:22px 40px 0}
+.connect form{display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto; gap:10px 18px; align-items:end; max-width:900px}
+.connect label{display:grid; gap:2px; font-size:15px; color:var(--ink-soft)}
+.connect input[type=text],.connect input[type=password]{background:transparent; border:0; border-bottom:1px solid var(--ink-faint); padding:4px 0; font-size:17px; outline:none; color:var(--ink)}
+.connect input:focus{border-bottom-color:var(--red)}
+.connect button{background:none; border:1px solid var(--ink-soft); padding:3px 16px; cursor:pointer; font:inherit; color:var(--ink)}
+.connect button:hover{background:var(--ink); color:var(--paper)}
+.connect .remember{grid-column:1/-1; display:flex; gap:6px; align-items:center; font-size:15px}
+.connect .remember input{accent-color:var(--red)}
+.connect .msg{font-style:italic; color:var(--ink-soft); max-width:70ch; margin:0 0 10px}
+.connect .msg.err{color:var(--red)}
+.connect .hint{font-size:15px; color:var(--ink-faint); max-width:78ch; margin:12px 0 0}
+.connect code{font-family:ui-monospace,Consolas,monospace; font-size:14px}
+@media (max-width:700px){ .connect{padding:18px 20px 0} .connect form{grid-template-columns:1fr} }
 .notes{font-size:15.5px; color:var(--ink-soft); max-width:64ch; border-top:1px solid var(--rule); padding-top:14px}
 .notes h2{font-size:18px; margin-bottom:6px}
 </style>
@@ -139,6 +153,18 @@ ol.log .p1,ol.log .p0{color:var(--ink-soft)}
   <span class="date" id="date"></span>
   <span id="watching">Starting…</span>
 </header>
+
+<section class="connect" id="connect" hidden aria-labelledby="connectTitle">
+  <h2 id="connectTitle">Where is the robot?</h2>
+  <p class="msg" id="connectMsg"></p>
+  <form id="connectForm">
+    <label>Robot address<input type="text" id="robotAddr" placeholder="http://127.0.0.1:8770" autocomplete="off" spellcheck="false"></label>
+    <label>Access key<input type="password" id="robotKey" placeholder="VISIONBOT_KEY from the .env file" autocomplete="off"></label>
+    <button type="submit">Connect</button>
+    <label class="remember"><input type="checkbox" id="remember" checked>Remember on this device</label>
+  </form>
+  <p class="hint">VisionBot itself runs on the robot’s computer; this page only shows what it sees. On that computer, the address is <code>http://127.0.0.1:8770</code> (your browser may ask to allow access to devices on your local network). From another device, open a secure tunnel on the robot’s computer, for example <code>cloudflared tunnel --url http://127.0.0.1:8770</code>, and paste the <code>https://</code> address it prints. The access key is in the <code>.env</code> file next to VisionBot.</p>
+</section>
 
 <main class="book">
   <div>
@@ -247,7 +273,7 @@ $('#date').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long
 
 /* ------------------------------------------------------------ Fig. 1 and the running head */
 const feed = $('#feed'), mat = $('#mat');
-function reloadFeed() { feed.src = '/stream.mjpg?t=' + Date.now(); }
+function reloadFeed() { feed.src = url('/stream.mjpg?t=' + Date.now(), true); }
 const p0 = v => (v == null ? 255 : v);
 function renderPlate() {
   const has = feed.naturalWidth > 0 && S.perf.frames > 0;
@@ -357,7 +383,7 @@ function renderJournal() {
   for (const h of entries) {
     const art = el('article', 'entry' + (h.entry ? '' : ' noimg'));
     if (h.entry) {
-      const img = el('img'); img.src = `/api/entry/${h.entry}.jpg`; img.alt = `What the robot saw at ${h.at}`;
+      const img = el('img'); img.src = url(`/api/entry/${h.entry}.jpg`, true); img.alt = `What the robot saw at ${h.at}`;
       img.onerror = () => { img.remove(); art.classList.add('noimg'); };
       art.append(img);
     }
@@ -474,23 +500,98 @@ function renderNotes() {
 
 function render() { renderPlate(); renderNow(); renderJournal(); renderAttention(); renderLog(); renderNotes(); }
 
+/* ------------------------------------------------------------ where the robot is */
+// Served by the robot itself, the page talks to its own address. Hosted elsewhere (Vercel), it asks.
+const ON_ROBOT = !/\.vercel\.app$/.test(location.hostname) && location.protocol.startsWith('http');
+const keep = {
+  get: k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } },
+  set: (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch { /* storage unavailable */ } },
+};
+let ROBOT = '', KEY = '', TICKET = '', wsRetry = null;
+function url(path, withTicket) {
+  if (!withTicket || !TICKET) return ROBOT + path;
+  return ROBOT + path + (path.includes('?') ? '&' : '?') + 'ticket=' + encodeURIComponent(TICKET);
+}
+function api(path, opts = {}) {
+  const headers = Object.assign({}, opts.headers || {}, KEY ? { 'X-VisionBot-Key': KEY } : {});
+  return fetch(url(path), { ...opts, headers });
+}
+const tidy = a => { a = (a || '').trim().replace(/\/+$/, ''); return a && !/^https?:\/\//i.test(a) ? 'http://' + a : a; };
+
+async function healthy(addr) {
+  try {
+    const r = await fetch(addr + '/api/health', { signal: AbortSignal.timeout(3000) });
+    return r.ok && (await r.json()).visionbot === true;
+  } catch { return false; }
+}
+async function openSession() {                     // trade the key for a ticket for <img> and WebSocket URLs
+  const r = await api('/api/session', { method: 'POST' });
+  if (r.status === 401) return false;
+  if (!r.ok) throw new Error(`the robot replied ${r.status}`);
+  TICKET = (await r.json()).ticket;
+  return true;
+}
+function showConnect(msg, err) {
+  $('#connect').hidden = false;
+  $('#connectMsg').textContent = msg; $('#connectMsg').className = 'msg' + (err ? ' err' : '');
+  $('#robotAddr').value = ROBOT || keep.get('vb.robot') || 'http://127.0.0.1:8770';
+  $('#watching').textContent = 'Not connected';
+  $('#waitText').textContent = 'Not connected to the robot.';
+  mat.classList.add('waiting');
+}
+async function start(addr, key, remember) {
+  KEY = key ?? keep.get('vb.key');
+  const candidates = [...new Set([addr, keep.get('vb.robot'), ON_ROBOT ? location.origin : '', 'http://127.0.0.1:8770'].map(tidy).filter(Boolean))];
+  ROBOT = '';
+  for (const c of (addr ? [tidy(addr)] : candidates)) if (await healthy(c)) { ROBOT = c; break; }
+  if (!ROBOT) {
+    showConnect(addr ? `Nothing answered at ${tidy(addr)}. Is VisionBot running there, and is the address right?`
+                     : 'The robot could not be found. Type the address where VisionBot is running.', !!addr);
+    return;
+  }
+  let ok;
+  try { ok = await openSession(); } catch (e) { showConnect(`Found the robot, but ${e.message}.`, true); return; }
+  if (!ok) {
+    showConnect(KEY ? 'That access key was not accepted.' : 'This robot needs its access key before it will show what it sees.', !!KEY);
+    $('#robotKey').focus();
+    return;
+  }
+  if (remember !== false) { keep.set('vb.robot', ROBOT); if (key != null) keep.set('vb.key', KEY); }
+  else { keep.set('vb.key', ''); }
+  $('#connect').hidden = true;
+  connect();
+}
+$('#connectForm').onsubmit = e => {
+  e.preventDefault();
+  const addr = $('#robotAddr').value, key = $('#robotKey').value.trim();
+  if (!addr.trim()) { showConnect('Type the robot’s address first.', true); return; }
+  if (location.protocol === 'https:' && /^http:/i.test(tidy(addr)) && !/^http:\/\/(127\.0\.0\.1|localhost)(:|$)/i.test(tidy(addr))) {
+    showConnect('This page is secure (https), so it can only reach the robot through an https address, such as the one a tunnel prints.', true);
+    return;
+  }
+  $('#connectMsg').textContent = 'Connecting…';
+  start(addr, key, $('#remember').checked);
+};
+
 /* ------------------------------------------------------------ connection */
 function connect() {
-  const ws = new WebSocket(`ws://${location.host}/ws`);
+  clearTimeout(wsRetry);
+  const ws = new WebSocket(url('/ws', true).replace(/^http/i, 'ws'));
   ws.onopen = () => { $('#waitText').textContent = 'Waiting for the first picture…'; reloadFeed(); syncToggles(); };
   ws.onmessage = ev => { S = JSON.parse(ev.data); render(); };
-  ws.onclose = () => {
-    $('#watching').textContent = 'The robot is not answering. Is the server running?';
+  ws.onclose = ev => {
+    $('#watching').textContent = 'The robot is not answering. Is VisionBot still running?';
     mat.classList.add('waiting'); $('#waitText').textContent = 'Not connected to the robot.';
-    setTimeout(connect, 1500);
+    // 1008: the ticket expired or the robot restarted; get a new one. Otherwise just try again.
+    wsRetry = setTimeout(() => (ev.code === 1008 ? start() : connect()), 1500);
   };
 }
-connect();
+start();
 addEventListener('resize', () => S && drawSpark());
 
 /* ------------------------------------------------------------ controls */
 async function toggle(body) {
-  const r = await fetch('/api/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await api('/api/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   return r.json();
 }
 async function syncToggles() {
@@ -516,7 +617,7 @@ function afterSwitch(info) {
 $('#useCamera').onclick = async () => {
   notice('Opening the camera…');
   try {
-    const r = await fetch('/api/source', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ camera: 0 }) });
+    const r = await api('/api/source', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ camera: 0 }) });
     const j = await r.json();
     if (j.error) notice(j.error, true); else afterSwitch(j);
   } catch (e) { notice('Could not reach the robot: ' + e.message, true); }
@@ -526,7 +627,8 @@ $('#file').onchange = e => { if (e.target.files[0]) upload(e.target.files[0]); e
 function upload(file) {
   if (!/^(image|video)\//.test(file.type)) { notice(`“${file.name}” is not a picture or a video.`, true); return; }
   const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/api/source');
+  xhr.open('POST', url('/api/source'));
+  if (KEY) xhr.setRequestHeader('X-VisionBot-Key', KEY);
   xhr.setRequestHeader('X-Filename', file.name);
   xhr.setRequestHeader('Content-Type', 'application/octet-stream');
   xhr.upload.onprogress = ev => { if (ev.lengthComputable) notice(`Sending “${file.name}”… ${Math.round(100 * ev.loaded / ev.total)}%`); };
@@ -551,7 +653,7 @@ $('#ask').onsubmit = async e => {
   if (!q) { out.className = 'answer err'; out.textContent = 'Write a question first.'; return; }
   out.className = 'answer faint'; out.textContent = 'Looking, and thinking it over. On the free service this can take half a minute…';
   try {
-    const r = await (await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) })).json();
+    const r = await (await api('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) })).json();
     if (r.error) { out.className = 'answer err'; out.textContent = `It could not answer this time: ${r.error}`; return; }
     out.className = 'answer';
     out.textContent = stop(r.answer || r.scene || 'No answer came back') + ' ';

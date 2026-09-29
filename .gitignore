@@ -16,3 +16,4 @@ weights/
 samples/
 uploads/
 bench_*.json
+.vercel

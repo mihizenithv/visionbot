@@ -131,6 +131,22 @@ was actually served (Cosmos Reason was listed but returned 404; the 90B model ti
 The benchmark clips aren't in the repository. `tests/make_calm_active.py` builds `calm_active.mp4`
 from OpenCV's `vtest.avi` sample (download it into `samples/` first).
 
+## Open it from anywhere (Vercel)
+
+The page is also hosted at **https://visionbot-ten.vercel.app**. Vercel serves only the page (`web/`);
+the engine can't run there (it needs a GPU, a camera and ~2 GB of models), so it keeps running on the
+robot's computer and the page connects to it:
+
+- **On the robot's computer:** open the Vercel page, keep the address `http://127.0.0.1:8770`, and
+  allow "access to devices on your local network" if the browser asks.
+- **From a phone or another computer:** on the robot's computer run a tunnel, for example
+  `cloudflared tunnel --url http://127.0.0.1:8770`, and enter the `https://` address it prints.
+
+Anything that isn't the robot's own page on the robot's own machine must present the **access key**
+(`VISIONBOT_KEY` in `.env`, created automatically on first start). The page swaps it for a
+short-lived ticket, so the key itself never appears in a URL. To deploy your own copy: `vercel deploy
+--prod` from this folder (`.vercelignore` makes sure only `web/` and `vercel.json` are uploaded).
+
 ## Robot integration
 
 `ws://127.0.0.1:8770/ws` streams the world state at 10 Hz: people (distance, 3D position, posture,
