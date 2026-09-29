@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visionbot — the observer’s journal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f1eadc;       /* prepared gesso */
+  --mat:#f8f4ea;
+  --ink:#2b221a;         /* iron-gall / umber */
+  --ink-soft:#54473a;
+  --ink-faint:#766753;
+  --rule:#d3c5ab;
+  --red:#a8361f;         /* vermilion: surprise and anything urgent */
+  --blue:#2f4b85;        /* lapis: people */
+  --ochre:#94702b;       /* ochre: things */
+  --serif:'EB Garamond','Garamond','Palatino Linotype','Book Antiqua',Georgia,serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:#1a1511; --mat:#221c16; --ink:#ebe1cf; --ink-soft:#c9b9a0; --ink-faint:#a0907a;
+    --rule:#3d3228; --red:#e06a4d; --blue:#93aae0; --ochre:#d2a85c; color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{background:var(--paper)}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font:400 18px/1.55 var(--serif); font-feature-settings:"onum","kern","liga";
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--red); color:var(--paper)}
+:focus-visible{outline:1px solid var(--red); outline-offset:3px}
+button,input{font:inherit; color:inherit}
+p{margin:0 0 .7em}
+
+/* running head, as at the top of a printed page */
+.head{
+  display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:4px 24px;
+  max-width:1360px; margin:0 auto; padding:18px 40px 10px; border-bottom:1px solid var(--rule);
+  font-size:15px; color:var(--ink-soft);
+}
+.head .name{font-size:19px; color:var(--ink); letter-spacing:.02em}
+.head .name i{color:var(--ink-faint)}
+.head .date{font-style:italic}
+
+.book{
+  max-width:1360px; margin:0 auto; padding:30px 40px 60px;
+  display:grid; grid-template-columns:minmax(0,1.45fr) minmax(320px,1fr); gap:0 56px;
+}
+@media (max-width:1000px){ .book{grid-template-columns:1fr; padding:24px 20px 48px} .head{padding:14px 20px 8px} }
+
+h2{font:italic 400 23px/1.25 var(--serif); margin:0 0 12px; letter-spacing:.005em}
+.block{margin:0 0 38px}
+.small{font-size:15.5px; color:var(--ink-soft)}
+.faint{color:var(--ink-faint)}
+.red{color:var(--red)}
+
+/* Fig. 1: the plate. The mat hugs the picture, so any aspect ratio sits naturally. */
+.plate{margin:0 0 10px; display:flex; justify-content:center; position:relative}
+.mat{
+  display:inline-block; max-width:100%; padding:10px; background:var(--mat);
+  border:1px solid var(--rule); box-shadow:0 1px 0 var(--rule);
+}
+.mat img{display:block; max-width:100%; max-height:64vh; width:auto; height:auto}
+.mat.waiting{display:flex; width:100%; min-height:320px; align-items:center; justify-content:center}
+.mat.waiting img{position:absolute; width:1px; height:1px; opacity:0}
+.mat .wait{font-style:italic; color:var(--ink-faint)}
+.mat:not(.waiting) .wait{display:none}
+.mat.drop{outline:1px dashed var(--red); outline-offset:6px}
+figcaption{font-size:15.5px; color:var(--ink-soft); text-align:center; margin:0 auto; max-width:68ch}
+figcaption .fig{font-variant:small-caps; letter-spacing:.04em; color:var(--ink)}
+
+.actions{margin:14px auto 0; text-align:center; font-size:16px; color:var(--ink-soft); line-height:2}
+.actions button.link{
+  background:none; border:0; padding:0; cursor:pointer; color:var(--ink);
+  text-decoration:underline; text-decoration-color:var(--rule); text-underline-offset:3px;
+}
+.actions button.link:hover{text-decoration-color:var(--red)}
+.actions label{white-space:nowrap; cursor:pointer}
+.actions input[type=checkbox]{accent-color:var(--red); margin:0 5px 0 0; transform:translateY(1px)}
+.actions .sep{margin:0 10px; color:var(--rule)}
+.notice{margin:8px auto 0; text-align:center; font-style:italic; font-size:15.5px; min-height:1.4em}
+.notice.err{color:var(--red)}
+
+/* Right now: prose */
+.now p{max-width:62ch}
+.now .lead{font-size:20px; line-height:1.5}
+
+/* Journal */
+.status{font-size:15.5px; font-style:italic; color:var(--ink-faint); margin:-6px 0 16px}
+.entry{display:grid; grid-template-columns:112px minmax(0,1fr); gap:6px 16px; padding:0 0 18px; margin:0 0 18px; border-bottom:1px solid var(--rule)}
+.entry:last-child{border-bottom:0}
+.entry img{width:112px; height:auto; display:block; border:1px solid var(--rule); padding:3px; background:var(--mat); filter:sepia(.4) saturate(.75) contrast(.95)}
+.entry .when{font-size:15px; color:var(--ink-faint); margin:0 0 3px}
+.entry .when b{font-weight:500; color:var(--ink)}
+.entry p{margin:0 0 .35em}
+.entry .said{font-size:17px}
+.entry .advice{font-style:italic}
+.entry.noimg{grid-template-columns:1fr}
+@media (max-width:480px){ .entry{grid-template-columns:84px minmax(0,1fr)} .entry img{width:84px} }
+
+/* Fig. 2: attention */
+.attn svg{width:100%; height:auto; max-height:340px; display:block}
+.attn canvas{width:100%; height:46px; display:block; margin-top:8px}
+.attn figcaption{text-align:left; margin:8px 0 0}
+
+/* Ask */
+form.ask{display:flex; gap:14px; align-items:flex-end}
+form.ask input{flex:1; min-width:0; background:transparent; border:0; border-bottom:1px solid var(--ink-faint); padding:4px 0; font-size:18px; outline:none}
+form.ask input::placeholder{color:var(--ink-faint); font-style:italic; opacity:1}
+form.ask input:focus{border-bottom-color:var(--red)}
+form.ask button{background:none; border:1px solid var(--ink-soft); padding:2px 16px; cursor:pointer}
+form.ask button:hover{background:var(--ink); color:var(--paper)}
+.answer{margin-top:12px; max-width:60ch}
+.answer.err{color:var(--red); font-style:italic}
+
+/* What happened */
+ol.log{list-style:none; margin:0; padding:0; max-height:300px; overflow-y:auto; font-size:16px}
+ol.log li{display:grid; grid-template-columns:3em 1fr; gap:12px; padding:2px 0}
+ol.log .t{text-align:right; color:var(--ink-faint); font-feature-settings:"onum","tnum"}
+ol.log .p3{color:var(--red)}
+ol.log .p1,ol.log .p0{color:var(--ink-soft)}
+
+.notes{font-size:15.5px; color:var(--ink-soft); max-width:64ch; border-top:1px solid var(--rule); padding-top:14px}
+.notes h2{font-size:18px; margin-bottom:6px}
+</style>
+</head>
+<body>
+
+<header class="head">
+  <span class="name">Visionbot <i>— an observer’s journal</i></span>
+  <span class="date" id="date"></span>
+  <span id="watching">Starting…</span>
+</header>
+
+<main class="book">
+  <div>
+    <figure class="block">
+      <div class="plate">
+        <div class="mat waiting" id="mat">
+          <img id="feed" alt="What the robot sees now, with people and things marked">
+          <span class="wait" id="waitText">Waiting for the first picture…</span>
+        </div>
+      </div>
+      <figcaption id="caption"><span class="fig">Fig. 1.</span> What the robot sees now.</figcaption>
+      <div class="actions">
+        <button class="link" id="useCamera" type="button">Use the camera</button><span class="sep">·</span><button class="link" id="openFile" type="button">Open a picture or video…</button><span class="sep">·</span><label><input type="checkbox" id="tHeat" checked>Show where it was surprised</label><span class="sep">·</span><label><input type="checkbox" id="tAdapt" checked>Let the detector rest when nothing moves</label><span class="sep">·</span><button class="link" id="tReset" type="button">Start afresh</button>
+      </div>
+      <input type="file" id="file" accept="image/*,video/*" hidden>
+      <p class="notice" id="notice" aria-live="polite"></p>
+      <p class="notice err" id="darkWarn" hidden>The camera is sending completely black pictures. Is its lens cover closed, or is the camera switched off (some laptops have a key for this, and Windows can block camera access under Settings → Privacy → Camera)?</p>
+    </figure>
+
+    <section class="block now">
+      <h2>Right now</h2>
+      <div id="now"><p class="faint">Nothing to report yet.</p></div>
+    </section>
+
+    <section class="block">
+      <h2>Ask it something</h2>
+      <form class="ask" id="ask">
+        <input id="q" placeholder="Where did the cup go?" aria-label="Your question" autocomplete="off">
+        <button type="submit">Ask</button>
+      </form>
+      <p class="answer" id="ans" aria-live="polite"></p>
+    </section>
+  </div>
+
+  <div>
+    <section class="block">
+      <h2>Journal</h2>
+      <p class="status" id="rstatus"></p>
+      <div id="journal"><p class="faint">No entries yet.</p></div>
+    </section>
+
+    <figure class="block attn">
+      <h2>Where its attention went</h2>
+      <svg id="veil" viewBox="0 0 200 150" role="img" aria-label="Grid of the patches the robot predicts; hatched squares surprised it">
+        <defs>
+          <pattern id="hatch" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="3" stroke="var(--red)" stroke-width="1.1"/>
+          </pattern>
+        </defs>
+        <g id="grid" stroke="var(--rule)" stroke-width="0.35"></g>
+        <g id="marks"></g>
+      </svg>
+      <canvas id="spark" aria-label="Surprise over the last minute"></canvas>
+      <figcaption id="attnCap"><span class="fig">Fig. 2.</span></figcaption>
+    </figure>
+
+    <section class="block">
+      <h2>What happened</h2>
+      <ol class="log" id="log"></ol>
+    </section>
+
+    <section class="notes">
+      <h2>Notes on speed</h2>
+      <p id="notes">No measurements yet.</p>
+    </section>
+  </div>
+</main>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const NB = ' ', NNB = ' ';                 // no-break space; narrow no-break space before units
+const SPIKE = 3.0;
+const spark = [];
+let S = null;
+
+/* ------------------------------------------------------------ small English helpers */
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const num = n => n < WORDS.length ? WORDS[n] : String(n);
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const SAME = new Set(['eyeglasses', 'headphones', 'keys', 'scissors', 'glasses']);
+function plural(w, n) {
+  if (n === 1 || SAME.has(w)) return w;
+  if (w === 'person') return 'people';
+  if (w === 'knife') return 'knives';
+  if (/(s|x|z|ch|sh)$/.test(w)) return w + 'es';
+  return w + 's';
+}
+const article = w => SAME.has(w) ? 'some' : (/^[aeiou]/i.test(w) ? 'an' : 'a');
+const list = xs => xs.length <= 1 ? (xs[0] || '') : xs.slice(0, -1).join(', ') + ' and ' + xs[xs.length - 1];
+const metres = m => m == null ? null : (m < 10 ? m.toFixed(1) : Math.round(m)) + NNB + 'm';
+const MODEL_NAMES = { 'llama-3.2-11b-vision-instruct': 'Llama 3.2 Vision (11B)', 'llama-3.2-90b-vision-instruct': 'Llama 3.2 Vision (90B)',
+  'cosmos-reason2-8b': 'Cosmos Reason 2', 'cosmos3-nano-reasoner': 'Cosmos 3 Reasoner' };
+const modelName = m => { const k = (m || '').split('/').pop(); return MODEL_NAMES[k] || k || 'the language model'; };
+const WOKEN = { person_entered: 'someone came into view', person_left: 'someone left', hand_raised: 'someone raised a hand',
+  possible_fall: 'someone may have fallen', person_close: 'someone came close', object_taken: 'something was picked up',
+  surprise: 'something unexpected happened', heartbeat: 'a routine look', question: 'a question', test: 'a test' };
+const woken = k => list((k || '').split('+').map(p => WOKEN[p] || p.replace(/_/g, ' ')));
+const ago = s => s < 60 ? 'a moment ago' : s < 3600 ? `${Math.round(s / 60)}${NB}min ago` : `${(s / 3600).toFixed(1)}${NB}h ago`;
+const clock = t => { const s = Math.max(0, Math.round(t)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const stop = s => s.replace(/[.!?]?\s*$/, '.');
+
+$('#date').textContent = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+/* ------------------------------------------------------------ Fig. 1 and the running head */
+const feed = $('#feed'), mat = $('#mat');
+function reloadFeed() { feed.src = '/stream.mjpg?t=' + Date.now(); }
+const p0 = v => (v == null ? 255 : v);
+function renderPlate() {
+  const has = feed.naturalWidth > 0 && S.perf.frames > 0;
+  mat.classList.toggle('waiting', !has);
+  const src = S.source;
+  if (src) {
+    const size = `${src.width}${NB}×${NB}${src.height}`;
+    $('#watching').textContent = src.kind === 'camera' ? `Watching the camera, ${size}`
+      : `Watching “${src.name.replace(/^\d+_/, '')}”, a ${src.kind === 'image' ? 'picture' : 'video'} (${size})`;
+  }
+  // a camera behind a closed shutter (or blocked by Windows privacy settings) sends black frames
+  const dark = S.source?.kind === 'camera' && p0(S.perf.brightness) < 6;
+  const warn = $('#darkWarn');
+  warn.hidden = !dark;
+  const p = S.perf, c = $('#caption');
+  c.replaceChildren(el('span', 'fig', 'Fig. 1. '));
+  if (!p.frames) { c.append(document.createTextNode('Waiting for the first picture.')); return; }
+  c.append(document.createTextNode(
+    `What the robot sees now. The page trails the camera by ${p.e2e_p50.toFixed(1)}${NNB}ms (${Math.round(p.e2e_p95)}${NNB}ms at worst).`));
+}
+
+/* ------------------------------------------------------------ Right now, in sentences */
+function describePerson(p) {
+  // "The person on the left is sitting, about 1.8 m away, facing the robot and smiling."
+  const posture = p.cues?.posture;
+  let s = `the person ${p.side || 'in view'} `;
+  if (posture === 'lying') s += 'appears to be lying down';
+  else if (posture) s += `is ${posture}`;
+  else if (p.state === 'occluded') s += 'is hidden for a moment';
+  else s += 'is';
+  if (p.dist_m != null) s += `${s.endsWith(' is') ? '' : ','} about ${metres(p.dist_m)} away`;
+  else if (s.endsWith(' is')) s += ' in view';
+  const bits = [];
+  if (p.cues?.facing_camera) bits.push('facing the robot');
+  if (p.cues?.hand_raised) bits.push('with a hand raised');
+  const ex = p.cues?.expression;
+  if (ex) bits.push(ex === 'a neutral expression' ? 'with a neutral expression' : ex);
+  if (bits.length) s += ', ' + list(bits);
+  return { text: cap(s) + '.', alert: posture === 'lying' };
+}
+function renderNow() {
+  const box = $('#now'); box.replaceChildren();
+  const ppl = [...S.people].sort((a, b) => (a.dist_m ?? 99) - (b.dist_m ?? 99));
+  const lead = el('p', 'lead');
+  lead.append(document.createTextNode(ppl.length
+    ? `${cap(num(ppl.length))} ${plural('person', ppl.length)} ${ppl.length === 1 ? 'is' : 'are'} in view. `
+    : 'No one is in view. '));
+  // people doing something notable get a sentence each; the rest are summed up, as a person would
+  const notable = ppl.filter(p => p.cues?.posture || p.cues?.hand_raised || p.cues?.facing_camera || p.cues?.expression).slice(0, 3);
+  for (const p of notable) { const d = describePerson(p); lead.append(el('span', d.alert ? 'red' : null, d.text + ' ')); }
+  const rest = ppl.filter(p => !notable.includes(p));
+  const ds = rest.map(p => p.dist_m).filter(v => v != null);
+  const span = ds.length > 1 && Math.max(...ds) - Math.min(...ds) >= 0.5
+    ? `between ${metres(Math.min(...ds)).replace(NNB + 'm', '')} and ${metres(Math.max(...ds))} away` : ds.length ? `about ${metres(ds[0])} away` : '';
+  if (rest.length === 1) lead.append(document.createTextNode(notable.length
+    ? `One other is ${span || 'in view'}.` : ''));
+  else if (rest.length > 1 && !notable.length) {
+    const near = rest[0];
+    const others = rest.slice(1).map(p => p.dist_m).filter(v => v != null);
+    let t = near.dist_m != null ? `The nearest is ${near.side}, about ${metres(near.dist_m)} away` : `None of them is doing anything in particular`;
+    if (others.length > 1) t += `; the others are between ${metres(Math.min(...others)).replace(NNB + 'm', '')} and ${metres(Math.max(...others))} away`;
+    else if (others.length === 1) t += `; the other is about ${metres(others[0])} away`;
+    lead.append(document.createTextNode(t + '.'));
+  } else if (rest.length > 1) {
+    lead.append(document.createTextNode(`${cap(num(rest.length))} others are ${span || 'in view'}.`));
+  }
+  if (ppl.length === 1 && !notable.length) {
+    const p = ppl[0];
+    lead.append(document.createTextNode(p.dist_m != null ? `They are ${p.side}, about ${metres(p.dist_m)} away.` : `They are ${p.side}.`));
+  }
+  box.append(lead);
+
+  const counts = new Map();
+  for (const o of S.objects) {
+    const c = counts.get(o.label) || { n: 0, d: null };
+    c.n++; if (o.dist_m != null && (c.d == null || o.dist_m < c.d)) c.d = o.dist_m;
+    counts.set(o.label, c);
+  }
+  if (counts.size) {
+    const parts = [...counts].slice(0, 10).map(([label, c]) =>
+      (c.n === 1 ? `${article(label)} ${label}` : `${num(c.n)} ${plural(label, c.n)}`) + (c.d != null ? ` (${metres(c.d)})` : ''));
+    box.append(el('p', null, `Also in view: ${list(parts)}.`));
+  }
+  if (S.remembered.length) {
+    const r = S.remembered.slice(0, 3).map(e => `${e.label === 'person' ? 'someone' : article(e.label) + ' ' + e.label} ${e.side}, last seen ${ago(e.seen_s_ago)}`);
+    box.append(el('p', 'small faint', `It still remembers ${list(r)}.`));
+  }
+}
+
+/* ------------------------------------------------------------ Journal */
+let journalKey = '';
+const sentences = t => (t || '').split(/;\s*/).filter(Boolean).map(x => stop(cap(x.trim()))).join(' ');
+function renderJournal() {
+  const r = S.reasoner, st = $('#rstatus');
+  if (!r.available) st.textContent = 'There is no NVIDIA key, so the robot keeps notes of what it sees but cannot interpret them.';
+  else st.textContent = `The robot writes each note the moment something happens; ${modelName(r.model)} then adds its reading of the scene.`;
+
+  const entries = r.history.slice(-10).reverse();
+  const key = entries.map(e => `${e.entry}:${e.pending}:${(e.scene || '').length}:${e.error ? 1 : 0}`).join('|');
+  if (key === journalKey) return;                                  // rebuild only when something changes
+  journalKey = key;
+  const box = $('#journal'); box.replaceChildren();
+  if (!entries.length) {
+    box.append(el('p', 'faint', 'No entries yet. A note is written whenever someone arrives, leaves, raises a hand, or something unexpected happens.'));
+    return;
+  }
+  for (const h of entries) {
+    const art = el('article', 'entry' + (h.entry ? '' : ' noimg'));
+    if (h.entry) {
+      const img = el('img'); img.src = `/api/entry/${h.entry}.jpg`; img.alt = `What the robot saw at ${h.at}`;
+      img.onerror = () => { img.remove(); art.classList.add('noimg'); };
+      art.append(img);
+    }
+    const body = el('div');
+    const when = el('p', 'when'); when.append(el('b', null, (h.at || '').slice(0, 5))); when.append(document.createTextNode(` — ${woken(h.trigger)}`));
+    body.append(when);
+    if (h.note) body.append(el('p', 'said', sentences(h.note)));
+    if (h.pending) body.append(el('p', 'small faint', `${modelName(h.model || r.model)} is looking at this…`));
+    else if (h.error) body.append(el('p', 'small faint', 'The language model could not be reached for this one; the free service was busy.'));
+    else {
+      let said = (h.scene || '').trim();
+      if (!said) said = list((h.people || []).filter(p => p.activity).map(p => `someone is ${p.activity}`));
+      if (said) {
+        const p = el('p', 'small');
+        p.append(el('i', null, 'Its reading: '));
+        p.append(document.createTextNode(stop(cap(said))));
+        body.append(p);
+      }
+      for (const hz of (h.hazards || [])) body.append(el('p', 'red', stop(cap(String(hz)))));
+      if (h.robot_should && !/^\s*(nothing|none|n\/a)\.?\s*$/i.test(h.robot_should)) body.append(el('p', 'advice small', `It suggests: ${stop(h.robot_should)}`));
+      if (h.latency_ms) body.append(el('p', 'small faint', `Read in ${Math.max(1, Math.round(h.latency_ms / 1000))}${NB}s.`));
+    }
+    art.append(body);
+    box.append(art);
+  }
+}
+
+/* ------------------------------------------------------------ Fig. 2 */
+const NS = 'http://www.w3.org/2000/svg';
+let gridH = 0;
+function drawGrid(H) {
+  if (H === gridH) return;
+  gridH = H;
+  $('#veil').setAttribute('viewBox', `-1 -1 202 ${H + 2}`);
+  const g = $('#grid'); g.replaceChildren();
+  const bg = document.createElementNS(NS, 'rect');          // the sheet itself, so its edge hugs the grid at any proportion
+  bg.setAttribute('x', 0); bg.setAttribute('y', 0); bg.setAttribute('width', 200); bg.setAttribute('height', H);
+  bg.setAttribute('fill', 'var(--mat)'); bg.setAttribute('stroke', 'var(--ink-faint)'); bg.setAttribute('stroke-width', '0.6');
+  g.append(bg);
+  const line = (x1, y1, x2, y2) => { const l = document.createElementNS(NS, 'line'); l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2); g.append(l); };
+  for (let i = 0; i <= 20; i++) line(i * 10, 0, i * 10, H);
+  for (let j = 0; j <= 15; j++) line(0, j * H / 15, 200, j * H / 15);
+}
+function renderAttention() {
+  const s = S.surprise;
+  const H = Math.round(200 * (S.source?.height || 3) / (S.source?.width || 4));   // the grid takes the picture's proportions
+  drawGrid(H);
+  const marks = $('#marks'); marks.replaceChildren();
+  const rect = (b, a) => {
+    const r = document.createElementNS(NS, 'rect');
+    r.setAttribute('x', b[0] * 200); r.setAttribute('y', b[1] * H);
+    r.setAttribute('width', Math.max(0.5, b[2] * 200)); r.setAttribute('height', Math.max(0.5, b[3] * H));
+    for (const k in a) r.setAttribute(k, a[k]);
+    marks.append(r);
+  };
+  for (const r of (s && !s.learning ? s.regions : []).filter(r => r.cells > 1 || r.peak >= 4))
+    rect(r.box, { fill: 'url(#hatch)', opacity: Math.min(1, 0.3 + (r.peak - 3) / 5).toFixed(2), stroke: 'var(--red)', 'stroke-width': 0.5 });
+  for (const p of S.people) rect(p.box, { fill: 'none', stroke: 'var(--blue)', 'stroke-width': 0.9 });
+  for (const o of S.objects) rect(o.box, { fill: 'none', stroke: 'var(--ochre)', 'stroke-width': 0.6, 'stroke-dasharray': '1.5 1.2' });
+
+  if (s) { spark.push(s.learning ? 0 : s.score); if (spark.length > 600) spark.shift(); }
+  let t;
+  if (!s) t = 'Surprise is switched off.';
+  else if (s.learning) t = `It is still learning what is ordinary here (${Math.round(100 * Math.min(1, s.step / Math.max(1, s.warmup)))}% of the way), and notices nothing until it has.`;
+  else if (s.score >= SPIKE) t = `Something unexpected: surprise is ${s.score.toFixed(1)} above its usual level. The hatched squares show where.`;
+  else t = `Nothing out of the ordinary; surprise is ${s.score.toFixed(1)} above its usual level.`;
+  const c = $('#attnCap');
+  c.replaceChildren(el('span', 'fig', 'Fig. 2. '));
+  c.append(document.createTextNode(t + ' The robot predicts the next moment square by square, and hatching marks where it guessed wrong. People are outlined in blue, things in dotted ochre. Beneath is the last minute of surprise; the dotted line is where it starts paying attention.'));
+  drawSpark();
+}
+function drawSpark() {
+  const c = $('#spark'), d = devicePixelRatio || 1, w = c.clientWidth * d, h = c.clientHeight * d;
+  if (!w) return;
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  const g = c.getContext('2d'); g.clearRect(0, 0, w, h);
+  const y = v => h - 3 * d - Math.min(1, v / 6) * (h - 6 * d);
+  g.strokeStyle = css('--rule'); g.lineWidth = d; g.beginPath(); g.moveTo(0, h - .5 * d); g.lineTo(w, h - .5 * d); g.stroke();
+  g.strokeStyle = css('--red'); g.setLineDash([2 * d, 3 * d]); g.beginPath(); g.moveTo(0, y(SPIKE)); g.lineTo(w, y(SPIKE)); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = css('--ink'); g.lineWidth = 1.2 * d; g.lineJoin = 'round'; g.beginPath();
+  spark.forEach((v, i) => { const x = w * i / 599; i ? g.lineTo(x, y(v)) : g.moveTo(x, y(v)); });
+  g.stroke();
+}
+
+/* ------------------------------------------------------------ What happened */
+let logKey = '';
+function renderLog() {
+  const key = `${S.events.length}|${S.events[S.events.length - 1]?.t ?? ''}`;
+  if (key === logKey) return;
+  logKey = key;
+  const ol = $('#log'); ol.replaceChildren();
+  for (const e of [...S.events].reverse()) {
+    const li = el('li', 'p' + e.priority);
+    li.append(el('span', 't', new Date(Date.now() - (S.t - e.t) * 1000).toTimeString().slice(0, 5)));
+    li.append(el('span', null, stop(e.text)));
+    ol.append(li);
+  }
+  if (!ol.children.length) ol.append(el('li', 'faint', 'Nothing yet.'));
+}
+
+/* ------------------------------------------------------------ Notes on speed */
+function renderNotes() {
+  const p = S.perf, r = S.router;
+  if (!p.frames) return;
+  const ms = v => `${v.toFixed(1)}${NNB}ms`;
+  $('#notes').textContent =
+    `Each picture becomes an updated account of the room in ${ms(p.e2e_p50)} on a typical frame and ${ms(p.e2e_p95)} at worst ` +
+    `(one frame in twenty), at ${p.fps.toFixed(0)} frames a second. Finding and following people and things takes ${ms(p.det_ms)}, ` +
+    `reading posture ${ms(p.pose_ms)}, the prediction that measures surprise ${ms(p.surprise_ms)}, and judging distance ${ms(p.depth_ms)}. ` +
+    `The detector looked at ${Math.round(p.det_fraction * 100)}% of the frames and rested when nothing moved. ` +
+    (S.reidentified ? `It recognised someone or something coming back ${S.reidentified} ${S.reidentified === 1 ? 'time' : 'times'} instead of treating them as new. ` : '') +
+    `Of ${r.events_seen} events, ${r.calls} ${r.calls === 1 ? 'was' : 'were'} worth asking the language model about; ${r.budget_left} requests remain for today.`;
+}
+
+function render() { renderPlate(); renderNow(); renderJournal(); renderAttention(); renderLog(); renderNotes(); }
+
+/* ------------------------------------------------------------ connection */
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { $('#waitText').textContent = 'Waiting for the first picture…'; reloadFeed(); syncToggles(); };
+  ws.onmessage = ev => { S = JSON.parse(ev.data); render(); };
+  ws.onclose = () => {
+    $('#watching').textContent = 'The robot is not answering. Is the server running?';
+    mat.classList.add('waiting'); $('#waitText').textContent = 'Not connected to the robot.';
+    setTimeout(connect, 1500);
+  };
+}
+connect();
+addEventListener('resize', () => S && drawSpark());
+
+/* ------------------------------------------------------------ controls */
+async function toggle(body) {
+  const r = await fetch('/api/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  return r.json();
+}
+async function syncToggles() {
+  try { const t = await toggle({}); $('#tHeat').checked = t.heatmap; $('#tAdapt').checked = t.adaptive; } catch { /* still reconnecting */ }
+}
+$('#tHeat').onchange = e => toggle({ heatmap: e.target.checked });
+$('#tAdapt').onchange = e => toggle({ adaptive: e.target.checked });
+$('#tReset').onclick = async () => {
+  if (confirm('Forget what the robot has learned is ordinary in this place? It needs about fifteen seconds to learn it again.')) {
+    await toggle({ reset_habituation: true });
+    notice('It has forgotten what is ordinary here and is learning again.');
+  }
+};
+
+function notice(text, err) { const n = $('#notice'); n.textContent = text; n.className = 'notice' + (err ? ' err' : ''); }
+function afterSwitch(info) {
+  spark.length = 0; journalKey = logKey = ''; gridH = 0;
+  $('#waitText').textContent = 'Waiting for the first picture…'; mat.classList.add('waiting');
+  reloadFeed();
+  const what = info.kind === 'camera' ? 'the camera' : `“${info.name.replace(/^\d+_/, '')}”`;
+  notice(`Now watching ${what}. It is starting a fresh account and needs a few seconds to settle.`);
+}
+$('#useCamera').onclick = async () => {
+  notice('Opening the camera…');
+  try {
+    const r = await fetch('/api/source', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ camera: 0 }) });
+    const j = await r.json();
+    if (j.error) notice(j.error, true); else afterSwitch(j);
+  } catch (e) { notice('Could not reach the robot: ' + e.message, true); }
+};
+$('#openFile').onclick = () => $('#file').click();
+$('#file').onchange = e => { if (e.target.files[0]) upload(e.target.files[0]); e.target.value = ''; };
+function upload(file) {
+  if (!/^(image|video)\//.test(file.type)) { notice(`“${file.name}” is not a picture or a video.`, true); return; }
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/source');
+  xhr.setRequestHeader('X-Filename', file.name);
+  xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+  xhr.upload.onprogress = ev => { if (ev.lengthComputable) notice(`Sending “${file.name}”… ${Math.round(100 * ev.loaded / ev.total)}%`); };
+  xhr.onload = () => {
+    let j = {}; try { j = JSON.parse(xhr.responseText); } catch { /* not JSON */ }
+    if (xhr.status >= 400 || j.error) notice(j.error || `The robot could not open “${file.name}”.`, true);
+    else afterSwitch(j);
+  };
+  xhr.onerror = () => notice('The upload failed. Is the server still running?', true);
+  notice(`Sending “${file.name}”…`);
+  xhr.send(file);
+}
+mat.addEventListener('dragover', e => { e.preventDefault(); mat.classList.add('drop'); });
+mat.addEventListener('dragleave', () => mat.classList.remove('drop'));
+mat.addEventListener('drop', e => { e.preventDefault(); mat.classList.remove('drop'); if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]); });
+
+/* ------------------------------------------------------------ ask */
+$('#q').addEventListener('input', () => $('#ans').classList.remove('err'));
+$('#ask').onsubmit = async e => {
+  e.preventDefault();
+  const q = $('#q').value.trim(), out = $('#ans');
+  if (!q) { out.className = 'answer err'; out.textContent = 'Write a question first.'; return; }
+  out.className = 'answer faint'; out.textContent = 'Looking, and thinking it over. On the free service this can take half a minute…';
+  try {
+    const r = await (await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) })).json();
+    if (r.error) { out.className = 'answer err'; out.textContent = `It could not answer this time: ${r.error}`; return; }
+    out.className = 'answer';
+    out.textContent = stop(r.answer || r.scene || 'No answer came back') + ' ';
+    if (r.latency_ms) out.append(el('span', 'faint small', `(${Math.max(1, Math.round(r.latency_ms / 1000))}${NB}s)`));
+  } catch (err) { out.className = 'answer err'; out.textContent = `The request failed: ${err.message}`; }
+};
+})();
+</script>
+</body>
+</html>

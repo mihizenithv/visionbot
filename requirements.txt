@@ -1,0 +1,12 @@
+# Install PyTorch with CUDA 12.8+ first (required for RTX 50-series / Blackwell GPUs):
+#   uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+ultralytics>=8.4          # YOLOE-26 + YOLO26-pose + ByteTrack
+transformers>=4.46        # Depth Anything V2 metric
+timm                      # V-JEPA 2.1 (torch.hub) dependency
+einops                    # V-JEPA 2.1 (torch.hub) dependency
+opencv-python
+numpy
+requests
+fastapi
+uvicorn[standard]
+onnxruntime               # FER+ facial-expression model (CPU, ~1 ms per face)

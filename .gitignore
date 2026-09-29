@@ -1,0 +1,18 @@
+# secrets: any .env variant (Notepad likes to save ".env.txt")
+.env
+.env.*
+!.env.example
+*.key
+
+# environments, caches
+.venv/
+__pycache__/
+*.pyc
+
+# large or personal data: model weights, learned state, test media, uploads, benchmark dumps
+weights/
+*.pt
+*.onnx
+samples/
+uploads/
+bench_*.json
