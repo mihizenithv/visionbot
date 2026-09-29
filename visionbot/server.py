@@ -93,17 +93,6 @@ def make_app(engine: Engine, allowed_origins: list[str] | None = None) -> FastAP
     def allowed(headers, query, client_host) -> bool:
         return is_local(headers, client_host) or key_ok(headers, query)
 
-    extra = [o.strip() for o in (allowed_origins or os.environ.get("VISIONBOT_ORIGINS", "").split(",")) if o.strip()]
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=extra,
-        allow_origin_regex=r"https://[a-z0-9-]+\.vercel\.app",     # the Vercel-hosted page
-        allow_methods=["GET", "POST"],
-        allow_headers=["content-type", "x-visionbot-key", "x-filename"],
-        max_age=600,
-        allow_private_network=True,                                  # Chrome's local-network check for 127.0.0.1
-    )
-
     @app.middleware("http")
     async def guard(request: Request, call_next):
         path = request.url.path
@@ -117,6 +106,20 @@ def make_app(engine: Engine, allowed_origins: list[str] | None = None) -> FastAP
         if protected and not allowed(request.headers, request.query_params, request.client.host if request.client else None):
             return JSONResponse({"error": "access key required"}, status_code=401)
         return await call_next(request)
+
+    # CORS is added last so it is the OUTERMOST layer: every response, including the guard's 401
+    # "access key required", carries the CORS headers. Otherwise a browser on the Vercel page can't
+    # read the refusal and only reports "Failed to fetch".
+    extra = [o.strip() for o in (allowed_origins or os.environ.get("VISIONBOT_ORIGINS", "").split(",")) if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=extra,
+        allow_origin_regex=r"https://[a-z0-9-]+\.vercel\.app",     # the Vercel-hosted page
+        allow_methods=["GET", "POST"],
+        allow_headers=["content-type", "x-visionbot-key", "x-filename"],
+        max_age=600,
+        allow_private_network=True,                                  # Chrome's local-network check for 127.0.0.1
+    )
 
     # ------------------------------------------------------------------ page + health
     @app.get("/")

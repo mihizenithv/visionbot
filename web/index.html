@@ -550,7 +550,13 @@ async function start(addr, key, remember) {
     return;
   }
   let ok;
-  try { ok = await openSession(); } catch (e) { showConnect(`Found the robot, but ${e.message}.`, true); return; }
+  try { ok = await openSession(); } catch (e) {
+    // a TypeError here means the browser refused the request before the robot could answer
+    showConnect(e instanceof TypeError
+      ? 'Found the robot, but the browser blocked the connection. If it asked about devices on your local network, allow it (Chrome: the icon left of the address bar → Site settings → Local network access → Allow), then press Connect.'
+      : `Found the robot, but ${e.message}.`, true);
+    return;
+  }
   if (!ok) {
     showConnect(KEY ? 'That access key was not accepted.' : 'This robot needs its access key before it will show what it sees.', !!KEY);
     $('#robotKey').focus();
